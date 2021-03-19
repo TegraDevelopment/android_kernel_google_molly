@@ -199,6 +199,22 @@ static struct tegra_i2c_platform_data molly_i2c5_platform_data = {
 
 /******************************************************************************
  *                                                                            *
+ *           discern boot mode and send correct keycode                       *
+ *                                                                            *
+ ******************************************************************************/
+static bool boot_mode_is_recovery = false;
+static int __init get_boot_mode(char *boot_mode)
+{
+	if (strstr(boot_mode, "recovery")) {
+		boot_mode_is_recovery = true;
+	}
+
+	return 0;
+}
+early_param("android.kerneltype", get_boot_mode);
+
+/******************************************************************************
+ *                                                                            *
  *           aah_io driver platform data                                      *
  *                                                                            *
  ******************************************************************************/
@@ -211,10 +227,26 @@ static struct aah_io_platform_data aah_io_data = {
 	.key_code = KEY_CONNECT, /* hardware pairing button */
 };
 
+static struct aah_io_platform_data aah_io_data_recovery = {
+#if MOLLY_ON_DALMORE == 0
+	.key_gpio = TEGRA_GPIO_PQ5, /* molly's UI_SWITCH, KB_COL5/GPIO_PQ5 */
+#else
+	.key_gpio = TEGRA_GPIO_PR2, /* dalmore's volume+ button for now */
+#endif
+	.key_code = KEY_ENTER, /* recovery select button */
+};
+
 static struct i2c_board_info __initdata aah_io_i2c_board_info[] = {
 	{
 		I2C_BOARD_INFO("aah-io", 0x32),
 		.platform_data = &aah_io_data,
+	},
+};
+
+static struct i2c_board_info __initdata aah_io_i2c_board_info_recovery[] = {
+	{
+		I2C_BOARD_INFO("aah-io", 0x32),
+		.platform_data = &aah_io_data_recovery,
 	},
 };
 
@@ -419,9 +451,13 @@ static void __init molly_i2c_init(void)
 	platform_device_register(&tegra11_i2c_device2);
 	platform_device_register(&tegra11_i2c_device1);
 
-	i2c_register_board_info(1, aah_io_i2c_board_info,
-				ARRAY_SIZE(aah_io_i2c_board_info));
-
+	if (boot_mode_is_recovery) {
+		i2c_register_board_info(1, aah_io_i2c_board_info_recovery,
+					ARRAY_SIZE(aah_io_i2c_board_info_recovery));
+	} else {
+		i2c_register_board_info(1, aah_io_i2c_board_info,
+					ARRAY_SIZE(aah_io_i2c_board_info));
+	}
 	temp_sensor_init();
 }
 
